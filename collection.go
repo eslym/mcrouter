@@ -2,53 +2,133 @@ package main
 
 import "sync"
 
-type Collection[C any] struct {
-	items map[*C]bool
+type set[C comparable] struct {
+	items map[C]bool
 	lock  sync.RWMutex
 }
 
-func NewCollection[C any]() *Collection[C] {
-	return &Collection[C]{
-		items: make(map[*C]bool),
+type Set[C comparable] interface {
+	Add(item C)
+	Remove(item C)
+	Contains(item C) bool
+	Len() int
+	Clear()
+	Each(callback func(C) error) error
+}
+
+func NewSet[C comparable]() Set[C] {
+	return &set[C]{
+		items: make(map[C]bool),
 	}
 }
 
-func (c *Collection[C]) Add(item *C) {
+func (c *set[C]) Add(item C) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.items[item] = true
 }
 
-func (c *Collection[C]) Remove(item *C) {
+func (c *set[C]) Remove(item C) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	delete(c.items, item)
 }
 
-func (c *Collection[C]) Contains(item *C) bool {
+func (c *set[C]) Contains(item C) bool {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	_, ok := c.items[item]
 	return ok
 }
 
-func (c *Collection[C]) Len() int {
+func (c *set[C]) Len() int {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	return len(c.items)
 }
 
-func (c *Collection[C]) Clear() {
+func (c *set[C]) Clear() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	c.items = make(map[*C]bool)
+	c.items = make(map[C]bool)
 }
 
-func (c *Collection[C]) Each(f func(*C) error) error {
+func (c *set[C]) Each(callback func(C) error) error {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	for item := range c.items {
-		err := f(item)
+		err := callback(item)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type _map[K comparable, V any] struct {
+	items map[K]V
+	lock  sync.RWMutex
+}
+
+type Map[K comparable, V any] interface {
+	Set(key K, value V)
+	Get(key K) (V, bool)
+	Remove(key K)
+	Contains(key K) bool
+	Len() int
+	Clear()
+	Each(callback func(K, V) error) error
+}
+
+func NewMap[K comparable, V any]() Map[K, V] {
+	return &_map[K, V]{
+		items: make(map[K]V),
+	}
+}
+
+func (c *_map[K, V]) Set(key K, value V) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	c.items[key] = value
+}
+
+func (c *_map[K, V]) Get(key K) (V, bool) {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	value, ok := c.items[key]
+	return value, ok
+}
+
+func (c *_map[K, V]) Remove(key K) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	delete(c.items, key)
+}
+
+func (c *_map[K, V]) Contains(key K) bool {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	_, ok := c.items[key]
+	return ok
+}
+
+func (c *_map[K, V]) Len() int {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	return len(c.items)
+}
+
+func (c *_map[K, V]) Clear() {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	c.items = make(map[K]V)
+}
+
+func (c *_map[K, V]) Each(callback func(K, V) error) error {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	for key, value := range c.items {
+		err := callback(key, value)
 		if err != nil {
 			return err
 		}

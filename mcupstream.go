@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"golang.org/x/crypto/ssh"
 	"net"
-	"sync"
 	"time"
 )
 
@@ -21,22 +20,29 @@ type forwardedConn struct {
 	channel       ssh.Channel
 	readDeadline  time.Time
 	writeDeadline time.Time
+	onClose       func(self *forwardedConn)
 }
 
-type McUpstream struct {
-	domain     string
-	targetHost string
-	targetPort uint32
-	sshConn    *ssh.ServerConn
+type mcUpstream struct {
+	closed        bool
+	domain        string
+	targetHost    string
+	targetPort    uint32
+	sshConn       *ssh.ServerConn
+	connections   Set[net.Conn]
+	ProxyProtocol bool
 }
 
-type McUpstreams struct {
-	lock      sync.RWMutex
-	upstreams map[string]*McUpstream
+type McUpstream interface {
+	Domain() string
+	SSHConn() *ssh.ServerConn
+	Close() error
+	CanBind(bind string) bool
+	Dial(src net.Conn) (net.Conn, error)
 }
 
-func NewMcUpstream(domain string, sshConn *ssh.ServerConn, targetHost string, targetPort uint32) *McUpstream {
-	return &McUpstream{
+func NewMcUpstream(domain string, sshConn *ssh.ServerConn, targetHost string, targetPort uint32) McUpstream {
+	return &mcUpstream{
 		domain:     domain,
 		sshConn:    sshConn,
 		targetHost: targetHost,
@@ -44,19 +50,37 @@ func NewMcUpstream(domain string, sshConn *ssh.ServerConn, targetHost string, ta
 	}
 }
 
-func (m *McUpstream) Domain() string {
+func (m *mcUpstream) Domain() string {
 	return m.domain
 }
 
-func (m *McUpstream) SSHConn() *ssh.ServerConn {
+func (m *mcUpstream) SSHConn() *ssh.ServerConn {
 	return m.sshConn
 }
 
-func (m *McUpstream) Close() error {
+func (m *mcUpstream) Close() error {
+	if m.closed {
+		return nil
+	}
+	m.closed = true
+	_ = m.connections.Each(func(conn net.Conn) error {
+		go func() {
+			_ = conn.Close()
+		}()
+		return nil
+	})
 	return m.sshConn.Close()
 }
 
-func (m *McUpstream) Dial(src net.Conn) (net.Conn, error) {
+func (m *mcUpstream) CanBind(bind string) bool {
+	_, ok := m.sshConn.Permissions.Extensions[bind]
+	return ok
+}
+
+func (m *mcUpstream) Dial(src net.Conn) (net.Conn, error) {
+	if m.closed {
+		return nil, fmt.Errorf("upstream closed")
+	}
 	srcHost, port, err := net.SplitHostPort(src.RemoteAddr().String())
 	if err != nil {
 		return nil, err
@@ -77,14 +101,19 @@ func (m *McUpstream) Dial(src net.Conn) (net.Conn, error) {
 		return nil, err
 	}
 	go ssh.DiscardRequests(reqs)
-	return &forwardedConn{
+	conn := &forwardedConn{
 		remoteAddr: &net.TCPAddr{
 			IP:   net.ParseIP(m.targetHost),
 			Port: int(m.targetPort),
 		},
 		localAddr: src.RemoteAddr(),
 		channel:   channel,
-	}, nil
+		onClose: func(self *forwardedConn) {
+			m.connections.Remove(self)
+		},
+	}
+	m.connections.Add(conn)
+	return conn, nil
 }
 
 func (f *forwardedConn) Read(b []byte) (int, error) {
@@ -102,12 +131,8 @@ func (f *forwardedConn) Write(b []byte) (int, error) {
 }
 
 func (f *forwardedConn) Close() error {
-	err1 := f.channel.CloseWrite()
-	err2 := f.channel.Close()
-	if err1 != nil {
-		return err1
-	}
-	return err2
+	f.onClose(f)
+	return f.channel.Close()
 }
 
 func (f *forwardedConn) LocalAddr() net.Addr {
@@ -178,40 +203,4 @@ func writeWithDeadline(channel ssh.Channel, buffer []byte, deadline time.Time) (
 	case err := <-errs:
 		return 0, err
 	}
-}
-
-func NewMcUpstreams() *McUpstreams {
-	return &McUpstreams{
-		upstreams: make(map[string]*McUpstream),
-	}
-}
-
-func (m *McUpstreams) Add(domain string, upstream *McUpstream) error {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-	if _, ok := m.upstreams[domain]; ok {
-		return fmt.Errorf("upstream %s already exists", domain)
-	}
-	m.upstreams[domain] = upstream
-	return nil
-}
-
-func (m *McUpstreams) Get(domain string) (*McUpstream, bool) {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
-	upstream, ok := m.upstreams[domain]
-	return upstream, ok
-}
-
-func (m *McUpstreams) Remove(domain string) {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-	delete(m.upstreams, domain)
-}
-
-func (m *McUpstreams) Contains(domain string) bool {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
-	_, ok := m.upstreams[domain]
-	return ok
 }

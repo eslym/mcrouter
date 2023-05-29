@@ -4,20 +4,24 @@ import (
 	"net"
 )
 
-type ForwardConn struct {
+type forwardConn struct {
 	src  net.Conn
 	dest net.Conn
 }
 
+type ForwardConn interface {
+	Close()
+}
+
 func NewForwardConn(src net.Conn, dest net.Conn) ForwardConn {
 	go forward(src, dest)
-	return ForwardConn{
+	return &forwardConn{
 		src:  src,
 		dest: dest,
 	}
 }
 
-func (f ForwardConn) Close() {
+func (f forwardConn) Close() {
 	_ = f.src.Close()
 	_ = f.dest.Close()
 }
