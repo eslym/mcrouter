@@ -26,7 +26,6 @@ type forwardedConn struct {
 type mcUpstream struct {
 	closed        bool
 	domain        string
-	targetHost    string
 	targetPort    uint32
 	sshConn       *ssh.ServerConn
 	connections   Set[net.Conn]
@@ -41,11 +40,10 @@ type McUpstream interface {
 	Dial(src net.Conn) (net.Conn, error)
 }
 
-func NewMcUpstream(domain string, sshConn *ssh.ServerConn, targetHost string, targetPort uint32) McUpstream {
+func NewMcUpstream(domain string, sshConn *ssh.ServerConn, targetPort uint32) McUpstream {
 	return &mcUpstream{
 		domain:     domain,
 		sshConn:    sshConn,
-		targetHost: targetHost,
 		targetPort: targetPort,
 	}
 }
@@ -63,12 +61,7 @@ func (m *mcUpstream) Close() error {
 		return nil
 	}
 	m.closed = true
-	_ = m.connections.Each(func(conn net.Conn) error {
-		go func() {
-			_ = conn.Close()
-		}()
-		return nil
-	})
+	go closeConnections(m.connections)
 	return m.sshConn.Close()
 }
 
@@ -91,7 +84,7 @@ func (m *mcUpstream) Dial(src net.Conn) (net.Conn, error) {
 		return nil, err
 	}
 	payload := forwardedTCPPayload{
-		Addr:       m.targetHost,
+		Addr:       m.domain,
 		Port:       m.targetPort,
 		OriginAddr: srcHost,
 		OriginPort: srcPort,
@@ -103,10 +96,10 @@ func (m *mcUpstream) Dial(src net.Conn) (net.Conn, error) {
 	go ssh.DiscardRequests(reqs)
 	conn := &forwardedConn{
 		remoteAddr: &net.TCPAddr{
-			IP:   net.ParseIP(m.targetHost),
-			Port: int(m.targetPort),
+			IP:   net.IPv4zero,
+			Port: 0,
 		},
-		localAddr: src.RemoteAddr(),
+		localAddr: src.LocalAddr(),
 		channel:   channel,
 		onClose: func(self *forwardedConn) {
 			m.connections.Remove(self)
@@ -203,4 +196,11 @@ func writeWithDeadline(channel ssh.Channel, buffer []byte, deadline time.Time) (
 	case err := <-errs:
 		return 0, err
 	}
+}
+
+func closeConnections(connections Set[net.Conn]) {
+	_ = connections.Each(func(conn net.Conn) error {
+		_ = conn.Close()
+		return nil
+	})
 }

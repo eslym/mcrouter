@@ -19,6 +19,27 @@ type UserConfig struct {
 	AllowedBindings []string `yaml:"allowed_bindings"`
 }
 
+type tcpipForwardPayload struct {
+	Addr string
+	Port uint32
+}
+
+type replyPort struct {
+	Port uint32
+}
+
+type EnableProxyProtocolCommandOptions struct {
+	Bindings []string `short:"b" name:"binding" description:"Bindings to enable Proxy Protocol for" required:"yes"`
+}
+
+type DisableProxyProtocolCommandOptions struct {
+	Bindings []string `short:"b" name:"binding" description:"Bindings to disable Proxy Protocol for" required:"yes"`
+}
+
+type ListBindingsCommandOptions struct{}
+
+type ExitCommandOptions struct{}
+
 var opts struct {
 	SSHListen       string `short:"S" name:"ssh" description:"SSH listen address" default:"127.0.0.1:2222"`
 	MinecraftListen string `short:"M" name:"minecraft" description:"Minecraft listen address" default:"127.0.0.1:25565"`
@@ -104,6 +125,13 @@ func handleSSH(conn net.Conn, config *ssh.ServerConfig) {
 		return
 	}
 
+	_ = bindings.AddConnection(sshConn)
+
+	go func() {
+		_ = sshConn.Wait()
+		bindings.RemoveConnection(sshConn)
+	}()
+
 	go handleRequests(sshConn, requests)
 	go handleChannels(sshConn, channels)
 	go handleKeepAlive(sshConn)
@@ -114,11 +142,45 @@ func handleMinecraft(conn net.Conn) {
 }
 
 func handleChannels(sshConn *ssh.ServerConn, channels <-chan ssh.NewChannel) {
-	// TODO: Implement
+	for newChannel := range channels {
+		switch newChannel.ChannelType() {
+		case "session":
+			channel, requests, err := newChannel.Accept()
+			if err != nil {
+				continue
+			}
+			go handleSession(sshConn, channel, requests)
+		default:
+			_ = newChannel.Reject(ssh.UnknownChannelType, "unknown channel type")
+		}
+	}
 }
 
 func handleRequests(sshConn *ssh.ServerConn, requests <-chan *ssh.Request) {
-	// TODO: Implement
+	for req := range requests {
+		switch req.Type {
+		case "tcpip-forward":
+			payload := tcpipForwardPayload{}
+			err := ssh.Unmarshal(req.Payload, &payload)
+			if err != nil {
+				replyWith(req, false, nil)
+				continue
+			}
+			if payload.Port == 0 {
+				payload.Port = 25565
+			}
+			err = bindings.AddBinding(sshConn, payload.Addr, payload.Port)
+			if err != nil {
+				replyWith(req, false, nil)
+				continue
+			}
+			port := replyPort{Port: payload.Port}
+			reply := ssh.Marshal(&port)
+			replyWith(req, true, reply)
+		default:
+			replyWith(req, false, nil)
+		}
+	}
 }
 
 func handleKeepAlive(sshConn *ssh.ServerConn) {
@@ -128,10 +190,33 @@ func handleKeepAlive(sshConn *ssh.ServerConn) {
 		case <-ticker:
 			_, _, err := sshConn.SendRequest("keepalive@minecraft", true, nil)
 			if err != nil {
-				bindings.RemoveConnection(sshConn)
 				_ = sshConn.Close()
 				return
 			}
+		}
+	}
+}
+
+func handleSession(conn *ssh.ServerConn, channel ssh.Channel, requests <-chan *ssh.Request) {
+	started := false
+	for req := range requests {
+		switch req.Type {
+		case "shell":
+			if started {
+				replyWith(req, false, nil)
+				continue
+			}
+			started = true
+			replyWith(req, true, nil)
+		case "exec":
+			if started {
+				replyWith(req, false, nil)
+				continue
+			}
+			started = true
+			replyWith(req, true, nil)
+		default:
+			replyWith(req, false, nil)
 		}
 	}
 }
@@ -235,4 +320,10 @@ func userPermission(config *UserConfig) *ssh.Permissions {
 	}
 
 	return &permissions
+}
+
+func replyWith(req *ssh.Request, ok bool, payload []byte) {
+	if req.WantReply {
+		_ = req.Reply(ok, payload)
+	}
 }

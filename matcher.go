@@ -7,19 +7,20 @@ import (
 )
 
 type section[C any] struct {
-	sections map[string]section[C]
+	sections map[string]*section[C]
 	value    C
 	hasValue bool
 }
 
 type matcher[C any] struct {
-	sections   section[C]
+	sections   *section[C]
 	emptyValue C
 	lock       sync.RWMutex
 }
 
 type Matcher[C any] interface {
-	Add(pattern string, value C) error
+	Set(pattern string, value C) error
+	Get(pattern string) (C, bool)
 	Remove(pattern string) bool
 	Match(domain string) (C, bool)
 	Contains(pattern string) bool
@@ -27,15 +28,28 @@ type Matcher[C any] interface {
 
 func NewMatcher[C any]() Matcher[C] {
 	return &matcher[C]{
-		sections: section[C]{},
+		sections: &section[C]{
+			sections: make(map[string]*section[C]),
+		},
 	}
 }
 
-func (m *matcher[C]) Add(pattern string, value C) error {
+func (m *matcher[C]) Set(pattern string, value C) error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	parts := strings.Split(pattern, ".")
 	return m.sections.set(parts, value)
+}
+
+func (m *matcher[C]) Get(pattern string) (C, bool) {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+	parts := strings.Split(pattern, ".")
+	sec, ok := m.sections.find(parts)
+	if ok && sec.hasValue {
+		return sec.value, true
+	}
+	return m.emptyValue, false
 }
 
 func (m *matcher[C]) Remove(pattern string) bool {
@@ -60,7 +74,7 @@ func (m *matcher[C]) Contains(pattern string) bool {
 	return ok && sec.hasValue
 }
 
-func (s section[C]) match(parts []string, emptyValue C) (C, bool) {
+func (s *section[C]) match(parts []string, emptyValue C) (C, bool) {
 	if len(parts) == 0 {
 		if s.hasValue {
 			return s.value, true
@@ -69,21 +83,26 @@ func (s section[C]) match(parts []string, emptyValue C) (C, bool) {
 	}
 	sec, ok := s.sections[parts[len(parts)-1]]
 	rest := parts[:len(parts)-1]
+	val, res := emptyValue, false
 	if ok {
-		return sec.match(rest, emptyValue)
+		val, res = sec.match(rest, emptyValue)
 	}
-	sec, ok = s.sections["*"]
-	if ok {
-		return sec.match(rest, emptyValue)
+	if !res {
+		sec, ok = s.sections["*"]
+		if ok {
+			val, res = sec.match(rest, emptyValue)
+		}
 	}
-	sec, ok = s.sections["**"]
-	if ok && s.hasValue {
-		return s.value, true
+	if !res {
+		sec, ok = s.sections["**"]
+		if ok && sec.hasValue {
+			return sec.value, true
+		}
 	}
-	return emptyValue, false
+	return val, res
 }
 
-func (s section[C]) find(parts []string) (section[C], bool) {
+func (s *section[C]) find(parts []string) (*section[C], bool) {
 	if len(parts) == 0 {
 		return s, true
 	}
@@ -92,10 +111,10 @@ func (s section[C]) find(parts []string) (section[C], bool) {
 	if ok {
 		return sec.find(rest)
 	}
-	return section[C]{}, false
+	return nil, false
 }
 
-func (s section[C]) set(parts []string, value C) error {
+func (s *section[C]) set(parts []string, value C) error {
 	if len(parts) == 0 {
 		if s.hasValue {
 			return fmt.Errorf("pattern already exists")
@@ -109,14 +128,14 @@ func (s section[C]) set(parts []string, value C) error {
 	if ok {
 		return sec.set(rest, value)
 	}
-	sec = section[C]{
-		sections: make(map[string]section[C]),
+	sec = &section[C]{
+		sections: make(map[string]*section[C]),
 	}
 	s.sections[parts[len(parts)-1]] = sec
 	return sec.set(rest, value)
 }
 
-func (s section[C]) remove(parts []string) bool {
+func (s *section[C]) remove(parts []string) bool {
 	if len(parts) == 0 {
 		if s.hasValue {
 			s.hasValue = false
