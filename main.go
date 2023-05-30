@@ -66,9 +66,8 @@ func main() {
 	}
 
 	config := &ssh.ServerConfig{
-		PublicKeyCallback:           handleSSHPublicKeyAuth,
-		PasswordCallback:            handlePasswordAuth,
-		KeyboardInteractiveCallback: handleKeyboardAuth,
+		PublicKeyCallback: handleSSHPublicKeyAuth,
+		PasswordCallback:  handlePasswordAuth,
 	}
 
 	config.AddHostKey(privateKey)
@@ -254,24 +253,6 @@ func handleSSHPublicKeyAuth(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Perm
 
 func handlePasswordAuth(conn ssh.ConnMetadata, password []byte) (*ssh.Permissions, error) {
 	return handlePassword(conn.User(), string(password))
-}
-
-func handleKeyboardAuth(conn ssh.ConnMetadata, client ssh.KeyboardInteractiveChallenge) (*ssh.Permissions, error) {
-	user := conn.User()
-	if user == "" {
-		ans, err := client("", "", []string{"Username"}, []bool{true})
-		if err != nil {
-			return nil, err
-		}
-		user = ans[0]
-	}
-	ans, err := client("", "", []string{"Password"}, []bool{false})
-	if err != nil {
-		return nil, err
-	}
-	pass := ans[0]
-
-	return handlePassword(user, pass)
 }
 
 func handlePassword(username string, password string) (*ssh.Permissions, error) {
