@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	proxyproto "github.com/pires/go-proxyproto"
 	"golang.org/x/crypto/ssh"
 	"net"
 	"time"
@@ -29,7 +30,7 @@ type mcUpstream struct {
 	targetPort    uint32
 	sshConn       *ssh.ServerConn
 	connections   Set[net.Conn]
-	ProxyProtocol bool
+	proxyProtocol bool
 }
 
 type McUpstream interface {
@@ -38,6 +39,8 @@ type McUpstream interface {
 	Close() error
 	CanBind(bind string) bool
 	Dial(src net.Conn) (net.Conn, error)
+	UseProxyProtocol() bool
+	SetProxyProtocol(use bool)
 }
 
 func NewMcUpstream(domain string, sshConn *ssh.ServerConn, targetPort uint32) McUpstream {
@@ -68,6 +71,14 @@ func (m *mcUpstream) Close() error {
 func (m *mcUpstream) CanBind(bind string) bool {
 	_, ok := m.sshConn.Permissions.Extensions[bind]
 	return ok
+}
+
+func (m *mcUpstream) UseProxyProtocol() bool {
+	return m.proxyProtocol
+}
+
+func (m *mcUpstream) SetProxyProtocol(use bool) {
+	m.proxyProtocol = use
 }
 
 func (m *mcUpstream) Dial(src net.Conn) (net.Conn, error) {
@@ -101,9 +112,17 @@ func (m *mcUpstream) Dial(src net.Conn) (net.Conn, error) {
 		},
 		localAddr: src.LocalAddr(),
 		channel:   channel,
-		onClose: func(self *forwardedConn) {
-			m.connections.Remove(self)
-		},
+	}
+	if m.proxyProtocol {
+		header := proxyproto.HeaderProxyFromAddrs(1, src.RemoteAddr(), src.LocalAddr())
+		_, err = header.WriteTo(conn)
+		if err != nil {
+			_ = conn.Close()
+			return nil, err
+		}
+	}
+	conn.onClose = func(self *forwardedConn) {
+		m.connections.Remove(self)
 	}
 	m.connections.Add(conn)
 	return conn, nil
@@ -124,7 +143,9 @@ func (f *forwardedConn) Write(b []byte) (int, error) {
 }
 
 func (f *forwardedConn) Close() error {
-	f.onClose(f)
+	if f.onClose != nil {
+		f.onClose(f)
+	}
 	return f.channel.Close()
 }
 

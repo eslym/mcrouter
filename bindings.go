@@ -20,6 +20,8 @@ type BindingManager interface {
 	HasBinding(pattern string) bool
 	Resolve(domain string) (McUpstream, bool)
 	RemoveBinding(pattern string)
+	SetProxyProtocol(conn *ssh.ServerConn, pattern string, proxyProtocol bool) error
+	EachBinding(conn *ssh.ServerConn, callback func(upstream McUpstream) error) error
 }
 
 func NewBindingManager() BindingManager {
@@ -89,14 +91,17 @@ func (m *bindingManager) HasBinding(pattern string) bool {
 	return m.bindings.Contains(pattern)
 }
 
-func (m *bindingManager) EachPattern(conn *ssh.ServerConn, callback func(pattern string) error) error {
+func (m *bindingManager) EachBinding(conn *ssh.ServerConn, callback func(upstream McUpstream) error) error {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 	if !m.connections.Contains(conn) {
 		return nil
 	}
 	domains, _ := m.connections.Get(conn)
-	return domains.Each(callback)
+	return domains.Each(func(pattern string) error {
+		upstream, _ := m.bindings.Get(pattern)
+		return callback(upstream)
+	})
 }
 
 func (m *bindingManager) Resolve(domain string) (McUpstream, bool) {
@@ -119,4 +124,22 @@ func (m *bindingManager) RemoveBinding(pattern string) {
 	m.bindings.Remove(pattern)
 	domains, _ := m.connections.Get(upstream.SSHConn())
 	domains.Remove(pattern)
+}
+
+func (m *bindingManager) SetProxyProtocol(conn *ssh.ServerConn, pattern string, proxyProtocol bool) error {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	if !m.connections.Contains(conn) {
+		return fmt.Errorf("connection does not exist")
+	}
+	validator, _ := m.allowedBindings.Get(conn)
+	if _, ok := validator.Get(pattern); !ok {
+		return fmt.Errorf("binding not allowed")
+	}
+	if !m.bindings.Contains(pattern) {
+		return fmt.Errorf("binding does not exist")
+	}
+	upstream, _ := m.bindings.Get(pattern)
+	upstream.SetProxyProtocol(proxyProtocol)
+	return nil
 }
