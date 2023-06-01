@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 	"log"
 	"net"
@@ -103,12 +104,34 @@ func handleKeepAlive(sshConn *ssh.ServerConn) {
 }
 
 func handleSession(conn *ssh.ServerConn, channel ssh.Channel, requests <-chan *ssh.Request) {
+	var pty *term.Terminal = nil
 request:
 	for req := range requests {
 		switch req.Type {
+		case "pty-req":
+			if pty != nil {
+				replyWith(req, false, nil)
+				continue
+			}
+			var ptyReq = struct {
+				Term    string
+				Columns uint32
+				Rows    uint32
+				Width   uint32
+				Height  uint32
+				Modes   string
+			}{}
+			err := ssh.Unmarshal(req.Payload, &ptyReq)
+			if err != nil {
+				replyWith(req, false, nil)
+				continue
+			}
+			pty = term.NewTerminal(channel, "> ")
+			_ = (*pty).SetSize(int(ptyReq.Columns), int(ptyReq.Rows))
+			replyWith(req, true, nil)
 		case "shell", "exec":
 			go func() {
-				session := NewSession(conn, channel, requests)
+				session := NewSession(conn, channel, requests, pty)
 				if req.Type == "exec" {
 					var cmd = struct {
 						Command string
