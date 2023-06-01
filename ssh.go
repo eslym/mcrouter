@@ -23,7 +23,6 @@ func handleSSH(conn net.Conn, config *ssh.ServerConfig) {
 	sshConn, channels, requests, err := ssh.NewServerConn(conn, config)
 
 	if err != nil {
-		log.Printf("Failed to handshake: %v", err)
 		return
 	}
 
