@@ -40,7 +40,7 @@ func (m *bindingManager) AddConnection(conn *ssh.ServerConn) error {
 	}
 	m.connections.Set(conn, NewSet[string]())
 	validator := NewMatcher[bool]()
-	for domain, _ := range conn.Permissions.Extensions {
+	for domain := range conn.Permissions.Extensions {
 		_ = validator.Set(domain, true)
 	}
 	m.allowedBindings.Set(conn, validator)
@@ -54,13 +54,14 @@ func (m *bindingManager) RemoveConnection(conn *ssh.ServerConn) {
 		return
 	}
 	domains, _ := m.connections.Get(conn)
-	go func() {
-		_ = domains.Each(func(binding string) error {
-			upstream, _ := m.bindings.Get(binding)
+	_ = domains.Each(func(binding string) error {
+		upstream, _ := m.bindings.Get(binding)
+		go func() {
 			_ = upstream.Close()
-			return nil
-		})
-	}()
+		}()
+		m.bindings.Remove(binding)
+		return nil
+	})
 	m.connections.Remove(conn)
 	m.allowedBindings.Remove(conn)
 }
@@ -72,7 +73,7 @@ func (m *bindingManager) AddBinding(conn *ssh.ServerConn, pattern string, target
 		return fmt.Errorf("connection does not exist")
 	}
 	validator, _ := m.allowedBindings.Get(conn)
-	if _, ok := validator.Get(pattern); !ok {
+	if _, ok := validator.Match(pattern); !ok {
 		return fmt.Errorf("binding not allowed")
 	}
 	if m.bindings.Contains(pattern) {
@@ -131,10 +132,6 @@ func (m *bindingManager) SetProxyProtocol(conn *ssh.ServerConn, pattern string, 
 	defer m.lock.Unlock()
 	if !m.connections.Contains(conn) {
 		return fmt.Errorf("connection does not exist")
-	}
-	validator, _ := m.allowedBindings.Get(conn)
-	if _, ok := validator.Get(pattern); !ok {
-		return fmt.Errorf("binding not allowed")
 	}
 	if !m.bindings.Contains(pattern) {
 		return fmt.Errorf("binding does not exist")

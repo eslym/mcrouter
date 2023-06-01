@@ -6,13 +6,8 @@ import (
 	"log"
 	"net"
 	"os"
+	"time"
 )
-
-type UserConfig struct {
-	Password        string   `yaml:"password"`
-	AuthorizedKeys  []string `yaml:"authorized_keys"`
-	AllowedBindings []string `yaml:"allowed_bindings"`
-}
 
 type tcpipForwardPayload struct {
 	Addr string
@@ -24,10 +19,14 @@ type replyPort struct {
 }
 
 var opts struct {
-	SSHListen       string `short:"S" name:"ssh" description:"SSH listen address" default:"127.0.0.1:2222"`
-	MinecraftListen string `short:"M" name:"minecraft" description:"Minecraft listen address" default:"127.0.0.1:25565"`
-	SSHKey          string `short:"k" name:"key" description:"SSH Server private key file" required:"yes"`
-	SSHAuth         string `short:"a" name:"auth" description:"SSH Server auth directories" default:"users"`
+	SSHListen       string   `short:"S" name:"ssh" description:"SSH listen address" default:"127.0.0.1:2222"`
+	MinecraftListen string   `short:"M" name:"minecraft" description:"Minecraft listen address" default:"127.0.0.1:25565"`
+	SSHKey          string   `short:"k" name:"key" description:"SSH Server private key file" required:"yes"`
+	SSHAuth         string   `short:"a" name:"auth" description:"SSH Server auth directories" default:"users"`
+	BanIP           bool     `short:"I" name:"ban-ip" description:"Ban IP addresses that tried to ping minecraft server directly"`
+	BanDuration     uint32   `short:"D" name:"ban-duration" description:"Ban duration in hours" default:"48"`
+	LogRejected     bool     `short:"R" name:"rejected" description:"Log rejected connections"`
+	GlobalDomains   []string `short:"d" name:"domain" description:"Global domain names allowed to bind"`
 }
 
 var bindings BindingManager
@@ -72,6 +71,10 @@ func main() {
 
 	bindings = NewBindingManager()
 
+	if opts.BanIP {
+		go cleanupBan()
+	}
+
 	go listenMinecraft(minecraftListener)
 	listenSSH(sshListener, config)
 }
@@ -98,6 +101,11 @@ func listenMinecraft(listener net.Listener) {
 	}
 }
 
-func handleMinecraft(conn net.Conn) {
-	// TODO: Implement
+func cleanupBan() {
+	for {
+		time.Sleep(5 * time.Minute)
+		_ = banList.Filter(func(ip string, until time.Time) (bool, error) {
+			return until.Before(time.Now()), nil
+		})
+	}
 }

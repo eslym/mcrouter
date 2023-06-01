@@ -14,6 +14,7 @@ type Set[C comparable] interface {
 	Len() int
 	Clear()
 	Each(callback func(C) error) error
+	Filter(callback func(C) (bool, error)) error
 }
 
 func NewSet[C comparable]() Set[C] {
@@ -65,6 +66,21 @@ func (c *set[C]) Each(callback func(C) error) error {
 	return nil
 }
 
+func (c *set[C]) Filter(callback func(C) (bool, error)) error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	for item := range c.items {
+		ok, err := callback(item)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			delete(c.items, item)
+		}
+	}
+	return nil
+}
+
 type _map[K comparable, V any] struct {
 	items map[K]V
 	lock  sync.RWMutex
@@ -78,6 +94,7 @@ type Map[K comparable, V any] interface {
 	Len() int
 	Clear()
 	Each(callback func(K, V) error) error
+	Filter(callback func(K, V) (bool, error)) error
 }
 
 func NewMap[K comparable, V any]() Map[K, V] {
@@ -131,6 +148,21 @@ func (c *_map[K, V]) Each(callback func(K, V) error) error {
 		err := callback(key, value)
 		if err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func (c *_map[K, V]) Filter(callback func(K, V) (bool, error)) error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	for key, value := range c.items {
+		ok, err := callback(key, value)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			delete(c.items, key)
 		}
 	}
 	return nil

@@ -45,9 +45,10 @@ type McUpstream interface {
 
 func NewMcUpstream(domain string, sshConn *ssh.ServerConn, targetPort uint32) McUpstream {
 	return &mcUpstream{
-		domain:     domain,
-		sshConn:    sshConn,
-		targetPort: targetPort,
+		domain:      domain,
+		sshConn:     sshConn,
+		targetPort:  targetPort,
+		connections: NewSet[net.Conn](),
 	}
 }
 

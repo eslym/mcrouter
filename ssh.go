@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"golang.org/x/crypto/ssh"
 	"gopkg.in/yaml.v3"
@@ -11,6 +12,12 @@ import (
 	"path"
 	"time"
 )
+
+type UserConfig struct {
+	Password        string   `yaml:"password"`
+	AuthorizedKeys  []string `yaml:"authorized_keys"`
+	AllowedBindings []string `yaml:"allowed_bindings"`
+}
 
 func handleSSH(conn net.Conn, config *ssh.ServerConfig) {
 	sshConn, channels, requests, err := ssh.NewServerConn(conn, config)
@@ -25,7 +32,10 @@ func handleSSH(conn net.Conn, config *ssh.ServerConfig) {
 	go func() {
 		_ = sshConn.Wait()
 		bindings.RemoveConnection(sshConn)
+		log.Printf("[SSH] %v disconnected", hex.EncodeToString(sshConn.SessionID()))
 	}()
+
+	log.Printf("[SSH] %v connected", hex.EncodeToString(sshConn.SessionID()))
 
 	go handleRequests(sshConn, requests)
 	go handleChannels(sshConn, channels)
@@ -62,6 +72,7 @@ func handleRequests(sshConn *ssh.ServerConn, requests <-chan *ssh.Request) {
 			}
 			err = bindings.AddBinding(sshConn, payload.Addr, payload.Port)
 			if err != nil {
+				log.Printf("[SSH] binding for %v (%s:%d) is rejected: %v", hex.EncodeToString(sshConn.SessionID()), payload.Addr, payload.Port, err)
 				replyWith(req, false, nil)
 				continue
 			}

@@ -1,7 +1,11 @@
 github.com/Potterli20/go-flags-fork v0.0.0-20230505080205-7bb32052277b h1:LTga1sPNdvvVyhkLDC+dq5nsKFXqVcra6yXHOVmggzo=
 github.com/Potterli20/go-flags-fork v0.0.0-20230505080205-7bb32052277b/go.mod h1:1Y4SJXeZME1Apg3Y9Y8c6xytclt0RKTngrAXIlS+x8Y=
+github.com/Tnze/go-mc v1.19.3 h1:vRRJSlqsN65+4Wgy/Sx9+Z1W3+S5BaQ1ZPcCp0TaXgs=
+github.com/Tnze/go-mc v1.19.3/go.mod h1:uNMPHRugYj2nXIHbmm8XTQJ1NpQAC2p214es9BIC5Rc=
 github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 h1:El6M4kTTCOh6aBiKaUGG7oYTSPP8MxqL4YI3kZKwcP4=
 github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510/go.mod h1:pupxD2MaaD3pAXIBCelhxNneeOaAeabZDe5s4K6zSpQ=
+github.com/google/uuid v1.1.1 h1:Gkbcsh/GbpXz7lPftLA3P6TYMwjCLYm83jiFQZF/3gY=
+github.com/google/uuid v1.1.1/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/pires/go-proxyproto v0.7.0 h1:IukmRewDQFWC7kfnb66CSomk2q/seBuilHBYFwyq0Hs=
 github.com/pires/go-proxyproto v0.7.0/go.mod h1:Vz/1JPY/OACxWGQNIRY2BeyDmpoaWmEP40O9LbuiFR4=
 golang.org/x/crypto v0.9.0 h1:LF6fAI+IutBocDJ2OT0Q1g8plpYljMZ4+lty+dsqw3g=
