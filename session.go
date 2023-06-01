@@ -8,6 +8,9 @@ import (
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/term"
 	"io"
+	"sort"
+	"strings"
+	"text/tabwriter"
 	"time"
 )
 
@@ -41,6 +44,7 @@ type session struct {
 	channel  ssh.Channel
 	signals  <-chan string
 	io       SessionIO
+	isPty    bool
 	needStop bool
 }
 
@@ -96,6 +100,7 @@ func NewSession(conn *ssh.ServerConn, channel ssh.Channel, requests <-chan *ssh.
 		ses.io = &sessionIO{channel, bufio.NewReader(channel)}
 	} else {
 		ses.io = pty
+		ses.isPty = true
 	}
 	return ses
 }
@@ -103,26 +108,37 @@ func NewSession(conn *ssh.ServerConn, channel ssh.Channel, requests <-chan *ssh.
 func (s *session) Exec(command string) bool {
 	args, err := shlex.Split(command)
 	var status exitStatus
-	if err == nil {
+	if err == nil && len(args) > 0 {
 		switch args[0] {
-		case "proxy":
+		case "proxy", "p":
 			err = s.handleProxyCommand(args)
-		case "list":
+		case "list", "ls":
 			err = s.handleListCommand(args)
-		case "help":
+		case "help", "h", "?":
 			err = s.handleHelpCommand(args)
-		case "exit":
+		case "exit", "quit", "q":
 			err = s.handleExitCommand(args)
+		case "clear", "cls":
+			if s.isPty {
+				_, _ = fmt.Fprint(s.io, "\033[H\033[2J")
+			} else {
+				err = fmt.Errorf("unknown command: %s", args[0])
+			}
 		default:
 			err = fmt.Errorf("unknown command: %s", args[0])
 		}
 	}
 	if err != nil {
 		status.ExitCode = 1
+		var out io.Writer = s.channel.Stderr()
 		if flags.WroteHelp(err) {
+			out = s.io
 			status.ExitCode = 0
 		}
-		_, _ = fmt.Fprintln(s.io, err)
+		if s.isPty {
+			out = s.io
+		}
+		_, _ = fmt.Fprintln(out, err)
 		_, _ = s.channel.SendRequest("exit-status", false, ssh.Marshal(status))
 		return false
 	}
@@ -213,19 +229,26 @@ func (s *session) handleListCommand(args []string) error {
 	if err != nil {
 		return err
 	}
-	_ = bindings.EachBinding(s.conn, func(upstream McUpstream) error {
-		_, _ = fmt.Fprint(s.io, upstream.Domain())
-		if opts.All {
+	if opts.All {
+		writer := tabwriter.NewWriter(s.io, 2, 2, 2, ' ', 0)
+		_, _ = writer.Write([]byte("DOMAIN\tCONNECTIONS\tPROXY PROTOCOL\n"))
+		_ = bindings.EachBinding(s.conn, func(upstream McUpstream) error {
 			_, _ = fmt.Fprintf(
-				s.io,
-				", proxy protocol:%t connections:%d\n",
-				upstream.UseProxyProtocol(), upstream.GetConnections(),
+				writer, "%s\t%d\t%t\n",
+				upstream.Domain(), upstream.GetConnections(), upstream.UseProxyProtocol(),
 			)
-		} else {
-			_, _ = fmt.Fprintln(s.io)
-		}
-		return nil
-	})
+			return nil
+		})
+		_ = writer.Flush()
+	} else {
+		var domains []string
+		_ = bindings.EachBinding(s.conn, func(upstream McUpstream) error {
+			domains = append(domains, upstream.Domain())
+			return nil
+		})
+		sort.Strings(domains)
+		_, _ = fmt.Fprintln(s.io, strings.Join(domains, " "))
+	}
 	return nil
 }
 
