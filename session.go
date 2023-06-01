@@ -14,7 +14,7 @@ type proxyProtoCommandOptions struct {
 }
 
 type listCommandOptions struct {
-	Proxy bool `short:"p" name:"proxy" description:"Show Proxy Protocol status"`
+	All bool `short:"a" name:"all" description:"Print all details"`
 }
 
 type emptyCommandOptions struct{}
@@ -72,6 +72,8 @@ func (s *session) Exec(command string) bool {
 			err = s.handleProxyCommand(args)
 		case "list":
 			err = s.handleListCommand(args)
+		case "help":
+			err = s.handleHelpCommand(args)
 		case "exit":
 			err = s.handleExitCommand(args)
 		default:
@@ -143,17 +145,22 @@ func (s *session) handleProxyCommand(args []string) error {
 	if err != nil {
 		return err
 	}
+	if len(opts.Enable) == 0 && len(opts.Disable) == 0 {
+		_, _ = fmt.Fprintln(s.channel, "No bindings specified")
+	}
 	for _, binding := range opts.Enable {
 		err = bindings.SetProxyProtocol(s.conn, binding, true)
 		if err != nil {
 			return err
 		}
+		_, _ = fmt.Fprintln(s.channel, "Enabled proxy protocol for", binding)
 	}
 	for _, binding := range opts.Disable {
 		err = bindings.SetProxyProtocol(s.conn, binding, false)
 		if err != nil {
 			return err
 		}
+		_, _ = fmt.Fprintln(s.channel, "Enabled proxy protocol for", binding)
 	}
 	return nil
 }
@@ -165,10 +172,15 @@ func (s *session) handleListCommand(args []string) error {
 		return err
 	}
 	_ = bindings.EachBinding(s.conn, func(upstream McUpstream) error {
-		if opts.Proxy {
-			_, _ = fmt.Fprintf(s.channel, "%s\t%t\n", upstream.Domain(), upstream.UseProxyProtocol())
+		_, _ = fmt.Fprint(s.channel, upstream.Domain())
+		if opts.All {
+			_, _ = fmt.Fprintf(
+				s.channel,
+				", proxy protocol:%t connections:%d\n",
+				upstream.UseProxyProtocol(), upstream.GetConnections(),
+			)
 		} else {
-			_, _ = fmt.Fprintln(s.channel, upstream.Domain())
+			_, _ = fmt.Fprintln(s.channel)
 		}
 		return nil
 	})
@@ -182,5 +194,18 @@ func (s *session) handleExitCommand(args []string) error {
 		return err
 	}
 	s.needStop = true
+	return nil
+}
+
+func (s *session) handleHelpCommand(args []string) error {
+	var opts emptyCommandOptions
+	_, err := s.parseArgs(args, &opts, "Show help")
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintln(s.channel, "Commands:")
+	_, _ = fmt.Fprintln(s.channel, "  proxy - Config proxy protocol for bindings")
+	_, _ = fmt.Fprintln(s.channel, "  list - List bindings")
+	_, _ = fmt.Fprintln(s.channel, "  exit - Exit")
 	return nil
 }

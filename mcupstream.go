@@ -37,10 +37,10 @@ type McUpstream interface {
 	Domain() string
 	SSHConn() *ssh.ServerConn
 	Close() error
-	CanBind(bind string) bool
 	Dial(src net.Conn) (net.Conn, error)
 	UseProxyProtocol() bool
 	SetProxyProtocol(use bool)
+	GetConnections() int
 }
 
 func NewMcUpstream(domain string, sshConn *ssh.ServerConn, targetPort uint32) McUpstream {
@@ -69,17 +69,16 @@ func (m *mcUpstream) Close() error {
 	return m.sshConn.Close()
 }
 
-func (m *mcUpstream) CanBind(bind string) bool {
-	_, ok := m.sshConn.Permissions.Extensions[bind]
-	return ok
-}
-
 func (m *mcUpstream) UseProxyProtocol() bool {
 	return m.proxyProtocol
 }
 
 func (m *mcUpstream) SetProxyProtocol(use bool) {
 	m.proxyProtocol = use
+}
+
+func (m *mcUpstream) GetConnections() int {
+	return m.connections.Len()
 }
 
 func (m *mcUpstream) Dial(src net.Conn) (net.Conn, error) {

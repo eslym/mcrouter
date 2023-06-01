@@ -28,3 +28,7 @@ func ReadLine(reader io.Reader) <-chan string {
 	}()
 	return ch
 }
+
+func Close(c io.Closer) {
+	_ = c.Close()
+}

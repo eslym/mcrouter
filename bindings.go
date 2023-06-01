@@ -56,9 +56,7 @@ func (m *bindingManager) RemoveConnection(conn *ssh.ServerConn) {
 	domains, _ := m.connections.Get(conn)
 	_ = domains.Each(func(binding string) error {
 		upstream, _ := m.bindings.Get(binding)
-		go func() {
-			_ = upstream.Close()
-		}()
+		go Close(upstream)
 		m.bindings.Remove(binding)
 		return nil
 	})
@@ -119,9 +117,7 @@ func (m *bindingManager) RemoveBinding(pattern string) {
 		return
 	}
 	upstream, _ := m.bindings.Get(pattern)
-	go func() {
-		_ = upstream.Close()
-	}()
+	go Close(upstream)
 	m.bindings.Remove(pattern)
 	domains, _ := m.connections.Get(upstream.SSHConn())
 	domains.Remove(pattern)

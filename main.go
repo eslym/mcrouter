@@ -26,7 +26,7 @@ var opts struct {
 	BanIP           bool     `short:"I" name:"ban-ip" description:"Ban IP addresses that tried to ping minecraft server directly"`
 	BanDuration     uint32   `short:"D" name:"ban-duration" description:"Ban duration in hours" default:"48"`
 	LogRejected     bool     `short:"R" name:"rejected" description:"Log rejected connections"`
-	GlobalDomains   []string `short:"d" name:"domain" description:"Global domain names allowed to bind"`
+	AllowedDomains  []string `short:"d" name:"domain" description:"Domain names allowed to connect"`
 }
 
 var bindings BindingManager

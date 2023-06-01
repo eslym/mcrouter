@@ -17,6 +17,7 @@ type McMessage struct {
 }
 
 var banList = NewMap[string, time.Time]()
+var allowedDomains = NewMatcher[bool]()
 
 func handleMinecraft(downstream net.Conn) {
 	if tcpAddr, ok := downstream.RemoteAddr().(*net.TCPAddr); ok {
@@ -78,6 +79,10 @@ func handleMinecraft(downstream net.Conn) {
 	}
 
 	upstream, ok := bindings.Resolve(string(Host))
+
+	if len(opts.AllowedDomains) > 0 {
+		ok, _ = allowedDomains.Match(string(Host))
+	}
 
 	if !ok {
 		action := "PING"
