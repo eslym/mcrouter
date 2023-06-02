@@ -1,7 +1,7 @@
 package main
 
 import (
-	"bytes"
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"golang.org/x/crypto/ssh"
@@ -163,6 +163,8 @@ func handleSSHPublicKeyAuth(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Perm
 		return nil, err
 	}
 
+	key1 := key.Marshal()
+
 	for _, authorizedKey := range config.AuthorizedKeys {
 		pub, _, _, _, err := ssh.ParseAuthorizedKey([]byte(authorizedKey))
 
@@ -170,7 +172,14 @@ func handleSSHPublicKeyAuth(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Perm
 			continue
 		}
 
-		if bytes.Compare(pub.Marshal(), key.Marshal()) != 0 {
+		key2 := pub.Marshal()
+
+		if len(key1) != len(key2) {
+			subtle.ConstantTimeCompare(key1, key1)
+			continue
+		}
+
+		if subtle.ConstantTimeCompare(key1, key2) != 1 {
 			continue
 		}
 
@@ -203,7 +212,12 @@ func handlePassword(username string, password string) (*ssh.Permissions, error) 
 		return nil, fmt.Errorf("password not set")
 	}
 
-	if config.Password == password {
+	if len(config.Password) != len(password) {
+		subtle.ConstantTimeCompare([]byte(password), []byte(password))
+		return nil, fmt.Errorf("password mismatch")
+	}
+
+	if subtle.ConstantTimeCompare([]byte(config.Password), []byte(password)) == 1 {
 		return userPermission(config), nil
 	}
 
