@@ -75,10 +75,7 @@ func handleMinecraft(downstream net.Conn) {
 
 	if opts.BanIP && net.ParseIP(string(Host)) != nil {
 		log.Printf("[MC] %s is trying to access directly to an IP address", downstream.RemoteAddr().String())
-		_ = downstream.Close()
-		if tcpAddr, ok := downstream.RemoteAddr().(*net.TCPAddr); ok {
-			banList.Set(tcpAddr.IP.String(), time.Now().Add(time.Duration(opts.BanDuration)*time.Hour))
-		}
+		ban(downstream)
 		return
 	}
 
@@ -89,6 +86,15 @@ func handleMinecraft(downstream net.Conn) {
 		if allowed, matched := allowedDomains.Match(string(Host)); matched {
 			ok = allowed
 		}
+	}
+
+	if !ok {
+		log.Printf(
+			"[MC] %s is trying to access to %s, but it is not allowed",
+			downstream.RemoteAddr().String(), string(Host),
+		)
+		ban(downstream)
+		return
 	}
 
 	upstream, ok := bindings.Resolve(string(Host))
@@ -124,6 +130,13 @@ func handleMinecraft(downstream net.Conn) {
 	_ = p.Pack(upConn, -1)
 
 	forward(downstream, upConn)
+}
+
+func ban(downstream net.Conn) {
+	_ = downstream.Close()
+	if tcpAddr, ok := downstream.RemoteAddr().(*net.TCPAddr); ok {
+		banList.Set(tcpAddr.IP.String(), time.Now().Add(time.Duration(opts.BanDuration)*time.Hour))
+	}
 }
 
 func kick(conn net.Conn, message string) {
