@@ -71,7 +71,7 @@ func (m *bindingManager) AddBinding(conn *ssh.ServerConn, pattern string, target
 		return fmt.Errorf("connection does not exist")
 	}
 	validator, _ := m.allowedBindings.Get(conn)
-	if _, ok := validator.Match(pattern); !ok {
+	if _, ok := validator.MatchPattern(pattern); !ok {
 		return fmt.Errorf("binding not allowed")
 	}
 	if m.bindings.Contains(pattern) {

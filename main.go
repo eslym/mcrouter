@@ -26,7 +26,8 @@ var opts struct {
 	BanIP           bool     `short:"I" name:"ban-ip" description:"Ban IP addresses that tried to ping minecraft server directly"`
 	BanDuration     uint32   `short:"D" name:"ban-duration" description:"Ban duration in hours" default:"48"`
 	LogRejected     bool     `short:"R" name:"rejected" description:"Log rejected connections"`
-	AllowedDomains  []string `short:"d" name:"domain" description:"Domain names allowed to connect"`
+	AllowedDomains  []string `short:"w" name:"whitelist" description:"Domain names allowed to connect"`
+	DeniedDomains   []string `short:"b" name:"blacklist" description:"Domain names denied to connect"`
 }
 
 var bindings BindingManager
@@ -64,6 +65,14 @@ func main() {
 
 	if err != nil {
 		log.Fatalf("Failed to listen on %s: %v", opts.MinecraftListen, err)
+	}
+
+	for _, domain := range opts.AllowedDomains {
+		_ = allowedDomains.Set(domain, true)
+	}
+
+	for _, domain := range opts.DeniedDomains {
+		_ = deniedDomains.Set(domain, true)
 	}
 
 	log.Printf("Listening on %s for SSH Server", opts.SSHListen)

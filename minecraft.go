@@ -18,6 +18,7 @@ type McMessage struct {
 
 var banList = NewMap[string, time.Time]()
 var allowedDomains = NewMatcher[bool]()
+var deniedDomains = NewMatcher[bool]()
 
 func handleMinecraft(downstream net.Conn) {
 	if tcpAddr, ok := downstream.RemoteAddr().(*net.TCPAddr); ok {
@@ -25,7 +26,10 @@ func handleMinecraft(downstream net.Conn) {
 		if ok && until.After(time.Now()) {
 			_ = downstream.Close()
 			if opts.LogRejected {
-				log.Printf("[MC] rejected banned connection from %s, until %v", downstream.RemoteAddr().String(), until)
+				log.Printf(
+					"[MC] rejected banned connection from %s, until %v",
+					downstream.RemoteAddr().String(), until,
+				)
 			}
 			return
 		}
@@ -78,11 +82,16 @@ func handleMinecraft(downstream net.Conn) {
 		return
 	}
 
-	upstream, ok := bindings.Resolve(string(Host))
+	denied, _ := deniedDomains.Match(string(Host))
+	ok := !denied
 
-	if len(opts.AllowedDomains) > 0 {
-		ok, _ = allowedDomains.Match(string(Host))
+	if !ok {
+		if allowed, matched := allowedDomains.Match(string(Host)); matched {
+			ok = allowed
+		}
 	}
+
+	upstream, ok := bindings.Resolve(string(Host))
 
 	if !ok {
 		action := "PING"

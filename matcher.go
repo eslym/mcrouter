@@ -23,6 +23,7 @@ type Matcher[C any] interface {
 	Get(pattern string) (C, bool)
 	Remove(pattern string) bool
 	Match(domain string) (C, bool)
+	MatchPattern(domain string) (C, bool)
 	Contains(pattern string) bool
 }
 
@@ -66,6 +67,13 @@ func (m *matcher[C]) Match(domain string) (C, bool) {
 	return m.sections.match(parts, m.emptyValue)
 }
 
+func (m *matcher[C]) MatchPattern(domain string) (C, bool) {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+	parts := strings.Split(domain, ".")
+	return m.sections.matchPattern(parts, m.emptyValue)
+}
+
 func (m *matcher[C]) Contains(pattern string) bool {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
@@ -92,6 +100,28 @@ func (s *section[C]) match(parts []string, emptyValue C) (C, bool) {
 		if ok {
 			val, res = sec.match(rest, emptyValue)
 		}
+	}
+	if !res {
+		sec, ok = s.sections["**"]
+		if ok && sec.hasValue {
+			return sec.value, true
+		}
+	}
+	return val, res
+}
+
+func (s *section[C]) matchPattern(parts []string, emptyValue C) (C, bool) {
+	if len(parts) == 0 {
+		if s.hasValue {
+			return s.value, true
+		}
+		return emptyValue, false
+	}
+	sec, ok := s.sections[parts[len(parts)-1]]
+	rest := parts[:len(parts)-1]
+	val, res := emptyValue, false
+	if ok {
+		val, res = sec.match(rest, emptyValue)
 	}
 	if !res {
 		sec, ok = s.sections["**"]
