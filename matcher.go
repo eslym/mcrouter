@@ -38,6 +38,7 @@ func NewMatcher[C any]() Matcher[C] {
 func (m *matcher[C]) Set(pattern string, value C) error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
+	pattern = strings.ToLower(pattern)
 	parts := strings.Split(pattern, ".")
 	return m.sections.set(parts, value)
 }
@@ -45,6 +46,7 @@ func (m *matcher[C]) Set(pattern string, value C) error {
 func (m *matcher[C]) Get(pattern string) (C, bool) {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
+	pattern = strings.ToLower(pattern)
 	parts := strings.Split(pattern, ".")
 	sec, ok := m.sections.find(parts)
 	if ok && sec.hasValue {
@@ -56,6 +58,7 @@ func (m *matcher[C]) Get(pattern string) (C, bool) {
 func (m *matcher[C]) Remove(pattern string) bool {
 	m.lock.Lock()
 	defer m.lock.Unlock()
+	pattern = strings.ToLower(pattern)
 	parts := strings.Split(pattern, ".")
 	return m.sections.remove(parts)
 }
@@ -63,6 +66,7 @@ func (m *matcher[C]) Remove(pattern string) bool {
 func (m *matcher[C]) Match(domain string) (C, bool) {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
+	domain = strings.ToLower(domain)
 	parts := strings.Split(domain, ".")
 	return m.sections.match(parts, m.emptyValue)
 }
@@ -70,6 +74,7 @@ func (m *matcher[C]) Match(domain string) (C, bool) {
 func (m *matcher[C]) MatchPattern(domain string) (C, bool) {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
+	domain = strings.ToLower(domain)
 	parts := strings.Split(domain, ".")
 	return m.sections.matchPattern(parts, m.emptyValue)
 }
@@ -77,6 +82,7 @@ func (m *matcher[C]) MatchPattern(domain string) (C, bool) {
 func (m *matcher[C]) Contains(pattern string) bool {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
+	pattern = strings.ToLower(pattern)
 	parts := strings.Split(pattern, ".")
 	sec, ok := m.sections.find(parts)
 	return ok && sec.hasValue
