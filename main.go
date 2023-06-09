@@ -114,7 +114,7 @@ func cleanupBan() {
 	for {
 		time.Sleep(5 * time.Minute)
 		_ = banList.Filter(func(ip string, until time.Time) (bool, error) {
-			return until.Before(time.Now()), nil
+			return until.After(time.Now()), nil
 		})
 	}
 }
