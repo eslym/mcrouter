@@ -124,6 +124,21 @@ The container uses two volumes for persistent data:
 - An SSH private key will be automatically generated if not found at the specified path
 - The auth directory should contain YAML files for user authentication as described in the Configuration section
 
+### Docker Hub
+
+The Docker image is automatically built and published to Docker Hub as `eslym/mcrouter` using GitHub Actions. The workflow is triggered on:
+
+- Pushes to the `main` branch (tagged as `latest`)
+- Release tags (tagged with the version number)
+
+To use the pre-built image from Docker Hub:
+
+```sh
+docker pull eslym/mcrouter
+```
+
+Then run it as described in the [Running with Docker](#running-with-docker) section.
+
 ## Development
 
 ### Prerequisites
@@ -149,6 +164,13 @@ go test ./...
 3. Commit your changes (`git commit -am 'Add some fooBar'`)
 4. Push to the branch (`git push origin feature/fooBar`)
 5. Create a new Pull Request
+
+### GitHub Actions
+
+The repository includes a GitHub Actions workflow for building and publishing the Docker image to Docker Hub. For this workflow to function properly, the following secrets need to be configured in the GitHub repository:
+
+- `DOCKERHUB_USERNAME`: Your Docker Hub username
+- `DOCKERHUB_TOKEN`: A Docker Hub access token with permissions to push to the repository
 
 ## License
 
