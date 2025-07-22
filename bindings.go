@@ -55,7 +55,10 @@ func (m *bindingManager) RemoveConnection(conn *ssh.ServerConn) {
 	}
 	domains, _ := m.connections.Get(conn)
 	_ = domains.Each(func(binding string) error {
-		upstream, _ := m.bindings.Get(binding)
+		upstream, ok := m.bindings.Get(binding)
+		if !ok {
+			return nil
+		}
 		go Close(upstream)
 		m.bindings.Remove(binding)
 		return nil

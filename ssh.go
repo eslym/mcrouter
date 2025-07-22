@@ -91,14 +91,11 @@ func handleKeepAlive(sshConn *ssh.ServerConn) {
 		_ = sshConn.Wait()
 		ticker.Stop()
 	}()
-	for {
-		select {
-		case <-ticker.C:
-			_, _, err := sshConn.SendRequest("keepalive@minecraft", true, nil)
-			if err != nil {
-				_ = sshConn.Close()
-				return
-			}
+	for range ticker.C {
+		_, _, err := sshConn.SendRequest("keepalive@minecraft", true, nil)
+		if err != nil {
+			_ = sshConn.Close()
+			return
 		}
 	}
 }
